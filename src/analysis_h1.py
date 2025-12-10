@@ -1,10 +1,47 @@
-# analysis_h1.py
 import random
+from typing import Dict, List, Tuple
 import numpy as np
 from src.simulation import EpidemicSimulation
 from src.helpers import build_households, bootstrap_contact_sequence, estimate_num_agents
 
-def run_h1(daily_edges, num_days=120, num_runs=100):
+def run_h1(
+    daily_edges: Dict[int, List[Tuple[int, int]]],
+    num_days: int = 120,
+    num_runs: int = 100,
+    infection_prob: float = 0.03,
+    infectious_days: int = 5,
+    external_infection_prob: float = 0.001,
+    initial_infected: int = 3,
+):
+    """Run Monte Carlo experiments for Hypothesis 1.
+
+    H1 compares:
+      - individual isolation of symptomatic cases vs.
+      - household level isolation (isolating the whole household of a symptomatic case)
+
+    :param daily_edges : Mapping from day index to a list of (i, j) contact pairs between agents
+    :param num_days : Number of synthetic days to simulate per run (default 120)
+    :param num_runs : Number of Monte Carlo runs to average over (default 100)
+
+    :returns mean_individual : Mean total infections when only symptomatic individuals are isolated.
+    :returns mean_household : Mean total infections when symptomatic individuals and their households are isolated.
+    :returns reduction : Relative reduction in infections from household isolation: 1 - mean_household / mean_individual
+
+    >>> edges = {0: [(0, 1)]}  # both agents meet on day 0
+    >>> mean_ind, mean_hh, red = run_h1(edges, num_days=5, num_runs=5)  # doctest: +ELLIPSIS
+    H1:
+      Mean total infections (individual isolation): ...
+      Mean total infections (household isolation): ...
+      Relative reduction: ...
+    >>> isinstance(mean_ind, float)
+    True
+    >>> isinstance(mean_hh, float)
+    True
+    >>> isinstance(red, float)
+    True
+    >>> bool(np.isnan(red))
+    False
+    """
     rng = random.Random(42)
     num_agents = estimate_num_agents(daily_edges)
     households = build_households(num_agents, household_size=4, rng=rng)
@@ -17,18 +54,18 @@ def run_h1(daily_edges, num_days=120, num_runs=100):
 
         # Scenario A: isolate symptomatic only
         simA = EpidemicSimulation(
-            num_agents=num_agents,
-            contact_sequence=seq,
-            infection_prob=0.03,
-            infectious_days=5,
-            rng=rng,
-            households=households,
-            isolate_symptomatic=True,
-            isolate_households=False,
-            vaccination_coverage=0.0,
-            external_infection_prob=0.001,
-        )
-        simA.seed_initial_infections(3)
+        num_agents=num_agents,
+        contact_sequence=seq,
+        infection_prob=infection_prob,
+        infectious_days=infectious_days,
+        rng=rng,
+        households=households,
+        isolate_symptomatic=True,
+        isolate_households=False,
+        vaccination_coverage=0.0,
+        external_infection_prob=external_infection_prob,
+    )
+        simA.seed_initial_infections(initial_infected)
         I_curve_A, final_R_A = simA.run(contact_reduction=1.0)
         final_individual.append(final_R_A)
 
@@ -60,4 +97,4 @@ def run_h1(daily_edges, num_days=120, num_runs=100):
     print("  Mean total infections (individual isolation):", mean_individual)
     print("  Mean total infections (household isolation):", mean_household)
     print("  Relative reduction:", reduction)
-    return reduction
+    return mean_individual, mean_household, reduction
